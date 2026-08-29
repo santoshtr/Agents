@@ -12,14 +12,25 @@ Usage:
     python -m agents.research_agent
 """
 
-import sys
 
-from agents.common import MODEL, get_client
+
+import sys
+from urllib import response
+from agents.common import MODEL, PRICES, get_client
+
+
+import csv
+from datetime import datetime
+from pathlib import Path
+
+LOG_FILE = Path(__file__).resolve().parent.parent / "usage_log.csv"
 
 TOOLS = [
-    {"type": "web_search_20260209", "name": "web_search"},
-    {"type": "web_fetch_20260209", "name": "web_fetch"},
+    {"type": "web_search_20260209", "name": "web_search", "max_uses": 3},
+    {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 5},
 ]
+
+from urllib.parse import urlparse
 
 
 class ResearchAgent:
@@ -60,7 +71,18 @@ class ResearchAgent:
         # Keep the full content (not just the text) so search results stay in
         # context for follow-up questions.
         self.messages.append({"role": "assistant", "content": response.content})
-
+        in_price, out_price = PRICES[MODEL]
+        cost = response.usage.input_tokens * in_price / 1_000_000 + response.usage.output_tokens * out_price / 1_000_000
+        is_new = not LOG_FILE.exists()
+        with open(LOG_FILE, "a", newline="") as f:
+            writer = csv.writer(f)
+            if is_new:
+                writer.writerow(["timestamp", "model", "input_tokens", "output_tokens", "cost_usd", "question"])
+            writer.writerow([datetime.now().isoformat(timespec="seconds"), response.model,
+                            response.usage.input_tokens, response.usage.output_tokens,
+                            f"{cost:.4f}", question[:80]])
+    
+        print(f"[usage: {response.model} · {response.usage.input_tokens} in / {response.usage.output_tokens} out · ${cost:.2f}]")
         return self._format(response)
 
     @staticmethod
@@ -69,12 +91,12 @@ class ResearchAgent:
         sources = []
 
         for block in response.content:
-            if block.type == "text":
-                answer_parts.append(block.text)
-            elif block.type == "web_search_tool_result" and isinstance(block.content, list):
-                for result in block.content:
-                    if getattr(result, "url", None):
-                        sources.append((result.title, result.url))
+            if block.type != "text":
+                continue
+            answer_parts.append(block.text)
+            for citation in (block.citations or []):
+                if getattr(citation, "url", None):
+                    sources.append((citation.title, citation.url))
 
         answer = "\n".join(answer_parts)
 
@@ -88,7 +110,6 @@ class ResearchAgent:
                 answer += f"- {title}: {url}\n"
 
         return answer
-
 
 def interactive() -> None:
     agent = ResearchAgent()

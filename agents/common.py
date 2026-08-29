@@ -6,7 +6,12 @@ from pathlib import Path
 
 import anthropic
 
-MODEL = "claude-opus-5"
+MODEL = "claude-sonnet-5"
+
+PRICES = {
+    "claude-opus-5": (5, 25),
+    "claude-sonnet-5": (2, 10),
+}
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
