@@ -5,3 +5,4 @@ __pycache__/
 workspace/
 notes/
 usage_log.csv
+.DS_Store

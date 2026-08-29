@@ -14,14 +14,12 @@ Usage:
 
 
 
-import sys
-from urllib import response
-from agents.common import MODEL, PRICES, get_client
-
-
 import csv
+import sys
 from datetime import datetime
 from pathlib import Path
+
+from agents.common import MODEL, PRICES, get_client
 
 LOG_FILE = Path(__file__).resolve().parent.parent / "usage_log.csv"
 
@@ -30,7 +28,15 @@ TOOLS = [
     {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 5},
 ]
 
-from urllib.parse import urlparse
+
+def _dedup(pairs: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    seen = set()
+    out = []
+    for title, url in pairs:
+        if url not in seen:
+            seen.add(url)
+            out.append((title, url))
+    return out
 
 
 class ResearchAgent:
@@ -88,26 +94,38 @@ class ResearchAgent:
     @staticmethod
     def _format(response) -> str:
         answer_parts = []
-        sources = []
+        cited_sources = []      # URLs Claude explicitly attributed a sentence to
+        searched_sources = []   # every page a search turned up, cited or not
 
         for block in response.content:
-            if block.type != "text":
-                continue
-            answer_parts.append(block.text)
-            for citation in (block.citations or []):
-                if getattr(citation, "url", None):
-                    sources.append((citation.title, citation.url))
+            if block.type == "text":
+                answer_parts.append(block.text)
+                for citation in block.citations or []:
+                    if getattr(citation, "url", None):
+                        cited_sources.append((citation.title or citation.url, citation.url))
+            elif block.type == "web_search_tool_result" and isinstance(block.content, list):
+                for result in block.content:
+                    url = getattr(result, "url", None)
+                    if url:
+                        searched_sources.append((getattr(result, "title", None) or url, url))
 
         answer = "\n".join(answer_parts)
+        cited_sources = _dedup(cited_sources)
 
-        if sources:
-            seen = set()
+        if cited_sources:
+            # Best case: Claude told us exactly which sentence came from where.
             answer += "\n\nSources:\n"
-            for title, url in sources:
-                if url in seen:
-                    continue
-                seen.add(url)
+            for title, url in cited_sources:
                 answer += f"- {title}: {url}\n"
+        else:
+            # Claude didn't attach citations this turn (it doesn't always).
+            # Fall back to what it searched, but say plainly these are
+            # unverified - not confirmed as the basis for any specific claim.
+            searched_sources = _dedup(searched_sources)[:10]
+            if searched_sources:
+                answer += "\n\n(No sources were explicitly cited this run. Pages searched, unverified:)\n"
+                for title, url in searched_sources:
+                    answer += f"- {title}: {url}\n"
 
         return answer
 
