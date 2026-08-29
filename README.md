@@ -6,8 +6,14 @@ Agents that run tasks, built on the Claude API.
 
 ```bash
 pip install -r requirements.txt
-export ANTHROPIC_API_KEY=sk-ant-...   # or `ant auth login`
+cp .env.example .env      # then paste your key into .env
 ```
+
+Get an API key at [console.anthropic.com](https://console.anthropic.com/settings/keys).
+`.env` is gitignored, so your key won't be committed.
+
+Prefer environment variables? `export ANTHROPIC_API_KEY=sk-ant-...` also works
+and takes precedence over `.env`.
 
 ## Examples
 
@@ -22,7 +28,12 @@ tool loop to write — Claude issues searches and fetches on Anthropic's
 infrastructure and returns an answer with sources.
 
 ```bash
+# One question, then exit:
 python -m agents.research_agent "What changed in the latest Python release?"
+
+# Or run with no arguments for an interactive session where follow-up
+# questions remember the conversation:
+python -m agents.research_agent
 ```
 
 ### 2. `agents/task_agent.py` — custom tools via the Tool Runner
