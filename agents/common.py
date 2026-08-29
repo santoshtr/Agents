@@ -52,4 +52,10 @@ def get_client() -> anthropic.Anthropic:
             "  2. Run: export ANTHROPIC_API_KEY=sk-ant-...\n"
         )
 
-    return anthropic.Anthropic()
+    # Identity-linked API keys aren't bound to a single workspace, so the API
+    # requires each request to name the workspace it acts in. Plain
+    # workspace-scoped keys don't need this - leave the variable unset.
+    workspace_id = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+    headers = {"anthropic-workspace-id": workspace_id} if workspace_id else None
+
+    return anthropic.Anthropic(default_headers=headers)
